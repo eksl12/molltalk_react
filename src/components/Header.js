@@ -71,8 +71,6 @@ class Header extends Component {
 		try {
 			fetchData = await User.login(params)
 			if (fetchData.data.code === '0000') {
-				const data = fetchData.data.result
-
 				this.setState({
 					params: {
 						id: '',
@@ -82,7 +80,7 @@ class Header extends Component {
 					registMode: false
 				})
 
-				this.props.onLogin(data)
+				this.props.setIsLogin(true)
 
 				alert('로그인 성공')
 			} else {
@@ -98,7 +96,7 @@ class Header extends Component {
 		try {
 			const fetchData = await User.logout()
 			if (fetchData.data.code === '0000') {
-				this.props.clear()
+				this.props.setIsLogin(false)
 			}
 		} catch(error) {
 			console.warn(error)
