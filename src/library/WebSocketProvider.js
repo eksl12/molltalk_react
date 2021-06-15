@@ -1,67 +1,104 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 
 const WebSocketContext = React.createContext(null)
 export { WebSocketContext }
 
-export default (props) => {
+const Ws = (props) => {
 	const ws = useRef(null)
+	const pingTimeout = useRef(null)
+	const connTimeout = useRef(null)
 
-	let connInterval = null
-	//websocket start
-	const webSocketInit = () => {
-		const webSocketUrl = `wss://api.zodaland.com`
+	const flag = props.flag
 
-			console.log('conning...')
+	const [onWs, setOnWs] = useState(false)
+
+	const goWs = useCallback(() => {
+		//websocket start
+		const webSocketInit = () => {
+			const webSocketUrl = `wss://api.test.zodaland.com/`
+
 			ws.current = new WebSocket(webSocketUrl)
 			ws.current.onopen = () => {
-				/////join test
-				const data = { type: 'CHAT', command: 'join' }
-				ws.current.send(JSON.stringify(data))
-				/////
-				console.log('conn')
-				clearInterval(connInterval)
-				connInterval = null
+				heartbeat()
 			}
 			ws.current.onmessage = (evt) => {
 				const data = JSON.parse(evt.data)
 				props.onMessage(data)
-				////join test
-				console.log('-------res message-----')
-				console.log(data)
-				console.log('-----------------------')
-				////
 			}
 			ws.current.onclose = error => {
-				console.log('disconn')
-				if (!connInterval) {
-					connInterval = setInterval(() => {
-						console.log('reconning...')
-						checkConnection(ws)
-					}, 10000)
-				}
+				setOnWs(false)
 			}
 			ws.current.onerror = error => {
-				console.log('error disconn')
-				if (!connInterval) {
-					connInterval = setInterval(() => {
-						console.log('reconning...')
-						checkConnection()
-					}, 10000)
-				}
 			}
-	}
-
-	//websocket restart
-	const checkConnection = () => {
-		if (!ws.current || ws.current.readyState === WebSocket.CLOSED) {
-			webSocketInit()
 		}
-	}
+
+		//ping
+		const heartbeat = () => {
+			if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+				ws.current.send(JSON.stringify({ type: 'PING' }))
+
+				pingTimeout.current = setTimeout(() => {
+					heartbeat()
+				}, 900)
+			} else {
+				clearTimeout(pingTimeout.current)
+				pingTimeout.current = null;
+			}
+		}
+
+		//reconnect
+		const connect = () => {
+			if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+				return
+			}
+			webSocketInit()
+
+			connTimeout.current = setTimeout(() => {
+					console.log('reconn')
+					connect()
+			}, 500)
+		}
+
+		if (onWs) {
+			connect()
+		} else {
+			setOnWs(true)
+		}
+	}, [onWs])
+
+	useEffect(() => {
+		goWs()
+
+		return () => {
+			clearTimeout(pingTimeout.current)
+			pingTimeout.current = null
+			clearTimeout(connTimeout.current)
+			connTimeout.current = null
+		}
+	}, [goWs])
+	const activateWebSocket = useCallback(() => {
+		const join = () => {
+			if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+				const data = { type: 'CHAT', command: 'join' }
+				ws.current.send(JSON.stringify(data))
+			} else {
+				setTimeout(() => {
+					join()
+				}, 50)
+			}
+		}
+
+		if (flag) {
+			setOnWs(true)
+			join()
+		} else if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+			ws.current.close()
+		}
+	}, [flag])
 
 	//Component Did Mount
-	useEffect(() => {
-		checkConnection()
-	})
+	useEffect(activateWebSocket, [activateWebSocket])
+
 
 	return (
 		<WebSocketContext.Provider value={ws}>
@@ -69,3 +106,5 @@ export default (props) => {
 		</WebSocketContext.Provider>
 	)
 }
+
+export default Ws
